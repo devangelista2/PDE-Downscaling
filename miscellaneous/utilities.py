@@ -1,5 +1,4 @@
 import numpy as np
-import networkx as nx
 
 
 def read_grid(filename):
@@ -53,28 +52,46 @@ def get_triangular_connections(vertices, d):
     return np.hstack((vAc, vBc, vCc, vAc))
 
 def get_coast(secA, secB):
+    # Get the list of nodes
     nodes = secA["id"]
+
+    # For any node...
     coast_nodes = []
     for i in range(len(nodes)):
-        p = i / (len(nodes)) * 100
-        print(f"Computing coast nodes... {p:0.2f}%", end="\r")
         node = int(nodes[i])
 
+        # Get (as numpy arrays) the column of the vertices of the triangle
         vA = np.array(secB["vA"])
         vB = np.array(secB["vB"])
         vC = np.array(secB["vC"])
 
+        # Count how many edges contains the considered node.
         count = np.sum(vA == node) + np.sum(vB == node) + np.sum(vC == node)
         
-        if count < 5:
+        # A node is on the coast if and only if it is connected to
+        # AT MOST 4 edges.
+        if count <= 4:
             coast_nodes.append(node)
+
+        # Verbose the percentage of nodes processed
+        p = i / (len(nodes)) * 100
+        print(f"Computing coast nodes... {p:0.2f}%", end="\r")
 
     return np.array(coast_nodes)
 
-def get_grid_from_coast_nodes(secA, coast_nodes):
-    for i in range(len(coast_nodes)):
-        node_id = int(coast_nodes[i])
+def get_coordinates_from_nodes(secA, nodes_list):
+    r"""
+    Takes as input the sectionA dictionary and the array containing a list
+    of nodes with shape (n, ), and returns an array of shape (2, n)
+    where each column contains the coordinates (latitude and longitude)
+    of the corresponding node.
+    """
+    # Iterate through the nodes
+    for i in range(len(nodes_list)):
+        node_id = int(nodes_list[i])
         
+        # The "-1" appears because the node indices in the .grd file 
+        # starts from 1, while Python starts counting from 0. 
         coord = np.array([[secA["latitude"][node_id-1]], [secA["longitude"][node_id-1]]])
         if i == 0:
             coord_arr = coord
