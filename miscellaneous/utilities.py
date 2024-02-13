@@ -51,3 +51,33 @@ def get_triangular_connections(vertices, d):
 
     # Concatenate coordinatees to draw triangles
     return np.hstack((vAc, vBc, vCc, vAc))
+
+def get_coast(secA, secB):
+    nodes = secA["id"]
+    coast_nodes = []
+    for i in range(len(nodes)):
+        p = i / (len(nodes)) * 100
+        print(f"Computing coast nodes... {p:0.2f}%", end="\r")
+        node = int(nodes[i])
+
+        vA = np.array(secB["vA"])
+        vB = np.array(secB["vB"])
+        vC = np.array(secB["vC"])
+
+        count = np.sum(vA == node) + np.sum(vB == node) + np.sum(vC == node)
+        
+        if count < 5:
+            coast_nodes.append(node)
+
+    return np.array(coast_nodes)
+
+def get_grid_from_coast_nodes(secA, coast_nodes):
+    for i in range(len(coast_nodes)):
+        node_id = int(coast_nodes[i])
+        
+        coord = np.array([[secA["latitude"][node_id-1]], [secA["longitude"][node_id-1]]])
+        if i == 0:
+            coord_arr = coord
+        else:
+            coord_arr = np.hstack((coord_arr, coord))
+    return coord_arr
