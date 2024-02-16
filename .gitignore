@@ -1,4 +1,6 @@
 data/grid/
 data/SHYFEM/
+data/parameters/
+data/BC_IBC/
 
 .DS_Store
