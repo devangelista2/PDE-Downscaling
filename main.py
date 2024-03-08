@@ -9,78 +9,84 @@ import numpy as np
 
 # CONSTANTS
 MONTH = 0 # Available months: from 0 to 7
+HOUR = 1  # From 0 to 719
+
+MAX_SHAPE = 256 # Maximum shape of the discrete image
+
+GENERATE_MASK = False    # WARNING: Take some time...
+GENERATE_MEAN_SL = True
+
+VISUALIZE = True
 
 # Load SHYFEM simulations from .nc file
 with netcdf.NetCDFFile(f"./data/SHYFEM/na-bcunige1_basGebco_000{MONTH}.ous.nc", "r") as f:
     latitude = f.variables["latitude"][:]
     longitude = f.variables["longitude"][:]
 
+    u_velocity = f.variables["u_velocity"][:]
+    v_velocity = f.variables["v_velocity"][:]
     water_level = f.variables["water_level"][:]
 
-    # print(f.variables.keys())
+if GENERATE_MEAN_SL:
+    # Generate (coarse) image from the grid
+    mean_SL = utilities.grid_to_image(latitude, longitude, QOI=water_level,
+                                         hour=HOUR, max_shape=MAX_SHAPE, mode='mean')
+    
+    # Save the generated mask
+    np.save("./data/grid/mean_SL.npy", mean_SL)
+else:
+    # Load sea mask
+    mean_SL = np.load("./data/grid/mean_SL.npy")
 
-# cropped_latitude_id = np.where((latitude > 45.50) & (latitude < 45.74))
-# cropped_longitude_id = np.where((longitude > 12.93) & (longitude < 13.17))
-# cropped_id = np.intersect1d(cropped_latitude_id, cropped_longitude_id)
-# 
-# cropped_water_level = water_level[:, cropped_id]
-# print(cropped_water_level.shape)
-# print(f"Min: {cropped_water_level[0].min()}, Max:{cropped_water_level[0].max()}, Std: {cropped_water_level[0].std()}.")
-# 
-# plt.plot(cropped_water_level.min(axis=1))
-# plt.plot(cropped_water_level.max(axis=1))
-# plt.legend(["min", "max"])
-# plt.grid()
-# plt.show()
+# Get the shape
+nx, ny = mean_SL.shape
+print(f"Shape of x: {mean_SL.shape}.")
 
-lat_m, lat_M = latitude.min(), latitude.max()
-lon_m, lon_M = longitude.min(), longitude.max()
+if GENERATE_MASK:
+    # Generate sea mask
+    sea_mask = utilities.grid_to_mask(grid_path="./data/grid/basbathy_50m_depth_20231010.grd",
+                                    max_shape=MAX_SHAPE)
+    
+    # Save the generated mask
+    np.save("./data/grid/sea_mask.npy", sea_mask)
+else:
+    # Load sea mask
+    sea_mask = np.load("./data/grid/sea_mask.npy")
 
-delta_x = (lat_M - lat_m) / 256
-delta_y = (lon_M - lon_m) / 256
-delta = max(delta_x, delta_y)
-print(f"{delta=:0.4f}.")
+def find_closest_nonzero(matrix, zero_coords):
+    nonzero_coords = np.transpose(np.nonzero(matrix))
+    distances = np.linalg.norm(nonzero_coords - zero_coords, axis=1)
+    closest_nonzero_index = np.argmin(distances)
+    closest_nonzero_coords = tuple(nonzero_coords[closest_nonzero_index])
+    return closest_nonzero_coords
 
-nx, ny = int(np.ceil((lat_M - lat_m)/delta)), int(np.ceil((lon_M - lon_m)/delta))
-
-coarse_image = np.zeros((nx, ny, 3))
+# Interpolate zero-valued pixels inside the mask
+nonzero_coords = np.transpose(np.nonzero(mean_SL))
 for i in range(nx):
     for j in range(ny):
-        cropped_latitude_id = np.where((latitude > lat_m + i*delta) & (latitude < lat_m + (i+1)*delta))
-        cropped_longitude_id = np.where((longitude > lon_m + j*delta) & (longitude < lon_m + (j+1)*delta))
-        cropped_id = np.intersect1d(cropped_latitude_id, cropped_longitude_id)
+        x = mean_SL[i, j]
 
-        if len(cropped_id) == 0:
-            coarse_image[i, j, 0] = 0
-            coarse_image[i, j, 1] = 0
-            coarse_image[i, j, 2] = 0
-        
-        else:
-            cropped_water_level = water_level[501, cropped_id]
+        # Interpolate only if its value is 0
+        if x < 1e-10 and sea_mask[i, j] == 1:
+            distances = np.linalg.norm(nonzero_coords - np.array([[i, j]]), axis=1)
+            closest_indices = np.argsort(distances)[:4]
+            closest_coordinates = [tuple(nonzero_coords[i]) for i in closest_indices]
 
-            coarse_image[i, j, 0] = cropped_water_level.mean()
-            coarse_image[i, j, 1] = cropped_water_level.max() - cropped_water_level.min()
-            coarse_image[i, j, 2] = cropped_water_level.std()
+            temp = 0
+            for s in range(len(closest_coordinates)):
+                temp += mean_SL[closest_coordinates[s]]
+            mean_SL[i, j] = temp / len(closest_coordinates)
 
-    print(f"{i=}")
+if VISUALIZE:
+    # Visualize the result
+    plt.imshow(mean_SL, cmap='viridis')
+    plt.title("Mean Sea Level")
+    plt.tight_layout()
+    plt.savefig(f'./results/mean_hour_{HOUR}.png', dpi=350)
+    plt.colorbar()
+    plt.show()
 
-coarse_image = np.flipud(coarse_image)
-
-plt.subplot(2, 2, 1)
-plt.imshow(coarse_image[:, :, 0], cmap='viridis')
-plt.title("Image")
-plt.colorbar()
-plt.axis('off')
-
-plt.subplot(2, 2, 2)
-plt.imshow(coarse_image[:, :, 1], cmap='viridis')
-plt.title("Max - Min")
-plt.colorbar()
-plt.axis('off')
-
-plt.subplot(2, 2, 3)
-plt.imshow(coarse_image[:, :, 2], cmap='viridis')
-plt.title("Std")
-plt.colorbar()
-plt.axis('off')
-plt.show()
+    plt.imshow(sea_mask, cmap='gray')
+    plt.savefig('./results/mask.png', dpi=350)
+    plt.tight_layout()
+    plt.show()
