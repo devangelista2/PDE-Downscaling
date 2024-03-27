@@ -3,17 +3,19 @@ import numpy as np
 
 def read_grid(filename):
     # Initialize dictionaries of data
-    secA = {"id": [],
-            "latitude": [],
-            "longitude": [],
-            }
-    secB = {"id": [],
-            "vA": [],
-            "vB": [],
-            "vC": [],
-            "depth": [],
-            }
-    
+    secA = {
+        "id": [],
+        "latitude": [],
+        "longitude": [],
+    }
+    secB = {
+        "id": [],
+        "vA": [],
+        "vB": [],
+        "vC": [],
+        "depth": [],
+    }
+
     # Open file from filename
     with open(filename) as f:
         # Iterate through the lines
@@ -44,12 +46,13 @@ def get_triangular_connections(vertices, d):
     vA, vB, vC = vertices
 
     # Get coordinates of vertices using informations in d
-    vAc = np.array([[d["latitude"][vA-1], d["longitude"][vA-1]]]).T
-    vBc = np.array([[d["latitude"][vB-1], d["longitude"][vB-1]]]).T
-    vCc = np.array([[d["latitude"][vC-1], d["longitude"][vC-1]]]).T
+    vAc = np.array([[d["latitude"][vA - 1], d["longitude"][vA - 1]]]).T
+    vBc = np.array([[d["latitude"][vB - 1], d["longitude"][vB - 1]]]).T
+    vCc = np.array([[d["latitude"][vC - 1], d["longitude"][vC - 1]]]).T
 
     # Concatenate coordinatees to draw triangles
     return np.hstack((vAc, vBc, vCc, vAc))
+
 
 def get_coast(secA, secB):
     # Get the list of nodes
@@ -67,7 +70,7 @@ def get_coast(secA, secB):
 
         # Count how many edges contains the considered node.
         count = np.sum(vA == node) + np.sum(vB == node) + np.sum(vC == node)
-        
+
         # A node is on the coast if and only if it is connected to
         # AT MOST 4 edges.
         if count <= 4:
@@ -79,6 +82,7 @@ def get_coast(secA, secB):
 
     return np.array(coast_nodes)
 
+
 def get_coordinates_from_nodes(secA, nodes_list):
     r"""
     Takes as input the sectionA dictionary and the array containing a list
@@ -89,17 +93,22 @@ def get_coordinates_from_nodes(secA, nodes_list):
     # Iterate through the nodes
     for i in range(len(nodes_list)):
         node_id = int(nodes_list[i])
-        
-        # The "-1" appears because the node indices in the .grd file 
-        # starts from 1, while Python starts counting from 0. 
-        coord = np.array([[secA["latitude"][node_id-1]], [secA["longitude"][node_id-1]]])
+
+        # The "-1" appears because the node indices in the .grd file
+        # starts from 1, while Python starts counting from 0.
+        coord = np.array(
+            [[secA["latitude"][node_id - 1]], [secA["longitude"][node_id - 1]]]
+        )
         if i == 0:
             coord_arr = coord
         else:
             coord_arr = np.hstack((coord_arr, coord))
     return coord_arr
 
-def grid_to_image(latitude, longitude, QOI, hour, max_shape=256, mode="mean", verbose=True):
+
+def grid_to_image(
+    latitude, longitude, QOI, hour, max_shape=256, mode="mean", verbose=True
+):
     # Verbose
     print(f"Generating {mode} Image of water level...")
 
@@ -113,18 +122,24 @@ def grid_to_image(latitude, longitude, QOI, hour, max_shape=256, mode="mean", ve
     print(f"Longitude: {lon_m, lon_M}.")
     print(f"Res: {delta}.")
 
-    nx, ny = int(np.ceil((lat_M - lat_m)/delta)), int(np.ceil((lon_M - lon_m)/delta))
+    nx, ny = int(np.ceil((lat_M - lat_m) / delta)), int(
+        np.ceil((lon_M - lon_m) / delta)
+    )
 
     coarse_image = np.zeros((nx, ny))
     for i in range(nx):
         for j in range(ny):
-            cropped_latitude_id = np.where((latitude > lat_m + i*delta) & (latitude < lat_m + (i+1)*delta))
-            cropped_longitude_id = np.where((longitude > lon_m + j*delta) & (longitude < lon_m + (j+1)*delta))
+            cropped_latitude_id = np.where(
+                (latitude > lat_m + i * delta) & (latitude < lat_m + (i + 1) * delta)
+            )
+            cropped_longitude_id = np.where(
+                (longitude > lon_m + j * delta) & (longitude < lon_m + (j + 1) * delta)
+            )
             cropped_id = np.intersect1d(cropped_latitude_id, cropped_longitude_id)
 
             if len(cropped_id) == 0:
                 coarse_image[i, j] = 0
-            
+
             else:
                 cropped_water_level = QOI[hour, cropped_id]
 
@@ -133,7 +148,9 @@ def grid_to_image(latitude, longitude, QOI, hour, max_shape=256, mode="mean", ve
                 elif mode.lower() == "std":
                     coarse_image[i, j] = cropped_water_level.std()
                 elif mode.lower() == "minmax":
-                    coarse_image[i, j] = cropped_water_level.max() - cropped_water_level.min()
+                    coarse_image[i, j] = (
+                        cropped_water_level.max() - cropped_water_level.min()
+                    )
                 else:
                     raise NotImplementedError
 
@@ -144,9 +161,12 @@ def grid_to_image(latitude, longitude, QOI, hour, max_shape=256, mode="mean", ve
     coarse_image = np.flipud(coarse_image)
     return coarse_image
 
+
 def grid_to_mask(grid_path, max_shape):
     def is_in(lmbda):
-        return np.all((lmbda >= 0) & (lmbda <= 1) & (np.sum(lmbda, axis=0) <= 1) , axis=0)
+        return np.all(
+            (lmbda >= 0) & (lmbda <= 1) & (np.sum(lmbda, axis=0) <= 1), axis=0
+        )
 
     # Verbose
     print("Generating Mask...")
@@ -162,18 +182,26 @@ def grid_to_mask(grid_path, max_shape):
     delta_y = (lon_M - lon_m) / max_shape
     delta = max(delta_x, delta_y)
 
-    nx, ny = int(np.ceil((lat_M - lat_m)/delta)), int(np.ceil((lon_M - lon_m)/delta))
+    nx, ny = int(np.ceil((lat_M - lat_m) / delta)), int(
+        np.ceil((lon_M - lon_m) / delta)
+    )
 
     mask = np.zeros((nx, ny))
     lat_coord = np.linspace(lat_m, lat_M, nx)
     lon_coord = np.linspace(lon_m, lon_M, ny)
     mesh_coord = np.meshgrid(lat_coord, lon_coord)
 
-    P = np.concatenate((np.expand_dims(mesh_coord[0].flatten(), -1), np.expand_dims(mesh_coord[1].flatten(),-1)), axis=1).T
+    P = np.concatenate(
+        (
+            np.expand_dims(mesh_coord[0].flatten(), -1),
+            np.expand_dims(mesh_coord[1].flatten(), -1),
+        ),
+        axis=1,
+    ).T
     for k in range(len(secB["id"])):
-        P1 = np.array([[latitude[secB["vA"][k]-1]], [longitude[secB["vA"][k]-1]]])
-        P2 = np.array([[latitude[secB["vB"][k]-1]], [longitude[secB["vB"][k]-1]]])
-        P3 = np.array([[latitude[secB["vC"][k]-1]], [longitude[secB["vC"][k]-1]]])
+        P1 = np.array([[latitude[secB["vA"][k] - 1]], [longitude[secB["vA"][k] - 1]]])
+        P2 = np.array([[latitude[secB["vB"][k] - 1]], [longitude[secB["vB"][k] - 1]]])
+        P3 = np.array([[latitude[secB["vC"][k] - 1]], [longitude[secB["vC"][k] - 1]]])
 
         A = np.concatenate((P1 - P3, P2 - P3), axis=1)
         A_inv = np.linalg.inv(A)
@@ -185,10 +213,9 @@ def grid_to_mask(grid_path, max_shape):
             j = p // nx
 
             mask[i, j] = 1
-        
-        perc = (k+1) / len(secB["id"]) * 100
-        print(f"Processing... {perc:0.3f}%", end='\r')
+
+        perc = (k + 1) / len(secB["id"]) * 100
+        print(f"Processing... {perc:0.3f}%", end="\r")
     print("")
     mask = np.flipud(mask)
     return mask
-        
